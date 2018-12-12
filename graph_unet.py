@@ -36,9 +36,9 @@ parser.add_argument('--log_interval', type=int, default=10, help='interval (numb
 parser.add_argument('--device', type=str, default='cuda', choices=['cuda', 'cpu'])
 parser.add_argument('--seed', type=int, default=111, help='random seed')
 parser.add_argument('--shuffle_nodes', action='store_true', default=False, help='shuffle nodes for debugging')
-parser.add_argument('--adj_sq', action='store_true', default=False, help='use A^2 instead of A as an adjacency matrix')
-parser.add_argument('--scale_identity', action='store_true', default=False, help='use 2I instead of I for self connections')
-parser.add_argument('--visualize', action='store_true', default=False, 
+parser.add_argument('-a', '--adj_sq', action='store_true', default=False, help='use A^2 instead of A as an adjacency matrix')
+parser.add_argument('-s', '--scale_identity', action='store_true', default=False, help='use 2I instead of I for self connections')
+parser.add_argument('-v', '--visualize', action='store_true', default=False, 
                     help='only for unet: save some adjacency matrices and other data as images')
                          
 args = parser.parse_args()
@@ -400,7 +400,8 @@ class GraphUnet(nn.Module):
             bound = 1 / math.sqrt(fan_in)
             torch.nn.init.uniform_(p, -bound, bound)
             self.proj.append(p)
-        
+        self.proj = nn.ParameterList(self.proj)
+
         # Fully connected layers
         fc = []
         if dropout > 0:
@@ -501,7 +502,7 @@ class GraphUnet(nn.Module):
         
 print('Loading data')
 datareader = DataReader(data_dir='./data/%s/' % args.dataset.upper(),
-                        rnd_state=np.random.RandomState(seed),
+                        rnd_state=np.random.RandomState(args.seed),
                         folds=n_folds,                    
                         use_cont_node_attr=False)
 
@@ -515,7 +516,7 @@ for fold_id in range(n_folds):
                              split=split)
 
         loader = torch.utils.data.DataLoader(gdata, 
-                                             batch_size=args.batch_size,
+                                             batch_size=args.bs,
                                              shuffle=split.find('train') >= 0,
                                              num_workers=args.threads)
         loaders.append(loader)
@@ -604,7 +605,7 @@ for fold_id in range(n_folds):
         return acc
 
     loss_fn = F.cross_entropy
-    for epoch in range(epochs):
+    for epoch in range(args.epochs):
         train(loaders[0])
         acc = test(loaders[0])
     acc_folds.append(acc)
