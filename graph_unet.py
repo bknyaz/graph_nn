@@ -441,7 +441,7 @@ class GraphUnet(nn.Module):
                         plt.figure()
                         plt.imshow(W[b][:N_nodes_tmp, :N_nodes_tmp].data.cpu().numpy())
                         plt.title('layer %d, Input adjacency matrix' % (layer))
-                        plt.tight_layout()
+                        #plt.tight_layout()
                         plt.savefig('input_adjacency_%d.png' % layer)
                         plot = b                        
                         break
@@ -479,19 +479,19 @@ class GraphUnet(nn.Module):
                     b = plot
                     plt.figure()
                     plt.imshow(y[b].view(N, 1).expand(N, 2)[:N_nodes_tmp].data.cpu().numpy())
-                    plt.title('layer %d, Ranking' % (layer))
+                    plt.title('Node ranking')
                     plt.colorbar()
-                    plt.tight_layout()
+                    #plt.tight_layout()
                     plt.savefig('nodes_ranking_%d.png' % layer)
                     plt.figure()
                     plt.imshow(mask[b].view(N, 1).expand(N, 2)[:N_nodes_tmp].data.cpu().numpy())
-                    plt.title('layer %d, Pooled nodes (%d/%d)' % (layer, mask[b].sum(), N_nodes_prev[b]))
-                    plt.tight_layout()
+                    plt.title('Pooled nodes (%d/%d)' % (mask[b].sum(), N_nodes_prev[b]))
+                    #plt.tight_layout()
                     plt.savefig('pooled_nodes_mask_%d.png' % layer)
                     plt.figure()
                     plt.imshow(W[b][:N_nodes_tmp, :N_nodes_tmp].data.cpu().numpy())
-                    plt.title('layer %d, Pooled adjacency matrix' % (layer))
-                    plt.tight_layout()
+                    plt.title('Pooled adjacency matrix')
+                    #plt.tight_layout()
                     plt.savefig('pooled_adjacency_%d.png' % layer)
                         
         if self.visualize and plot > -1:
