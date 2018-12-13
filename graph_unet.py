@@ -421,7 +421,7 @@ class GraphUnet(nn.Module):
         if self.shuffle_nodes:
             N = data[0].shape[1]
             idx = torch.randperm(N)
-            data = (data[0][:, idx], data[1][:, idx][idx, :], data[2][:, idx], data[3])
+            data = (data[0][:, idx], data[1][:, idx, :][:, :, idx], data[2][:, idx], data[3])
         plot = -1
         N_nodes_tmp = -1
         for layer, gconv in enumerate(self.gconv):
