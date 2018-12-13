@@ -26,6 +26,9 @@ python graph_unet.py --model unet  # to run Graph U-Net
 | Graph U-Net + *A<sup>2</sup>*         | 74.18 ± 0.92 |
 | Graph U-Net + *A<sup>2</sup>* + *2I*  | 73.56 ± 0.64 |
 
+# Requirements
+
+The code is tested on Ubuntu 16.04 with pytorch 0.4.1 and Python 3.6, but should in principle work in other environments with pytorch >= 0.4
 
 # References
 
