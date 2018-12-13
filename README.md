@@ -28,7 +28,9 @@ python graph_unet.py --model unet  # to run Graph U-Net
 
 # Requirements
 
-The code is tested on Ubuntu 16.04 with pytorch 0.4.1 and Python 3.6, but should in principle work in other environments with pytorch >= 0.4.
+The code is tested on Ubuntu 16.04 with pytorch 0.4.1 and Python 3.6, but should work in other environments with pytorch >= 0.4. 
+
+The [python file](graph_unet.py) and [jupyter notebook file](graph_unet.ipynb) contain essentially the same code, the notebook file is kept for debugging purposes.
 
 # References
 
