@@ -40,6 +40,7 @@ parser.add_argument('-a', '--adj_sq', action='store_true', default=False, help='
 parser.add_argument('-s', '--scale_identity', action='store_true', default=False, help='use 2I instead of I for self connections')
 parser.add_argument('-v', '--visualize', action='store_true', default=False, 
                     help='only for unet: save some adjacency matrices and other data as images')
+parser.add_argument('-c', '--use_cont_node_attr', action='store_true', default=False, help='use continuous node attributes in addition to discrete ones')
                          
 args = parser.parse_args()
 args.filters = list(map(int, args.filters.split(',')))
@@ -504,7 +505,7 @@ print('Loading data')
 datareader = DataReader(data_dir='./data/%s/' % args.dataset.upper(),
                         rnd_state=np.random.RandomState(args.seed),
                         folds=n_folds,                    
-                        use_cont_node_attr=False)
+                        use_cont_node_attr=args.use_cont_node_attr)
 
 acc_folds = []
 for fold_id in range(n_folds):
@@ -612,3 +613,4 @@ for fold_id in range(n_folds):
 
 print(acc_folds)
 print('{}-fold cross validation avg acc (+- std): {} ({})'.format(n_folds, np.mean(acc_folds), np.std(acc_folds)))
+
