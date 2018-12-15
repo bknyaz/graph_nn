@@ -56,7 +56,7 @@ torch.manual_seed(args.seed)
 torch.cuda.manual_seed(args.seed)
 torch.cuda.manual_seed_all(args.seed)
 
-# Data loader and reader
+# Unversal data loader and reader (can be used for other graph datasets from https://ls11-www.cs.tu-dortmund.de/staff/morris/graphkerneldatasets)
 class GraphData(torch.utils.data.Dataset):
     def __init__(self,
                  datareader,
@@ -108,15 +108,14 @@ class GraphData(torch.utils.data.Dataset):
     def __getitem__(self, index):
         index = self.indices[index]
         N_nodes_max = self.N_nodes_max
-        N_nodes = self.adj_list[index].shape[0]
+        N_nodes = self.adj_list[index].shape[0] 
         graph_support = np.zeros(self.N_nodes_max)
-        graph_support[:N_nodes] = 1
+        graph_support[:N_nodes] = 1  # mask with values of 0 for dummy (zero padded) nodes, otherwise 1 
         return self.nested_list_to_torch([self.pad(self.features_onehot[index].copy(), self.N_nodes_max),  # node_features
                                           self.pad(self.adj_list[index], self.N_nodes_max, self.N_nodes_max),  # adjacency matrix
-                                          graph_support,  # mask with values of 0 for dummy (zero padded) nodes, otherwise 1 
+                                          graph_support,  
                                           N_nodes,
                                           int(self.labels[index])])  # convert to torch
-
 
 class DataReader():
     '''
@@ -295,7 +294,7 @@ class DataReader():
 class GraphConv(nn.Module):
     '''
     Graph Convolution Layer according to (T. Kipf and M. Welling, ICLR 2017)
-    Additional tricks (power of adjacency matrix and weight self connections) as in the Graph U-Net paper
+    Additional tricks (power of adjacency matrix and weighted self connections) as in the Graph U-Net paper
     '''
     def __init__(self,
                 in_features,
@@ -418,85 +417,97 @@ class GraphUnet(nn.Module):
         self.fc = nn.Sequential(*fc)
         
     def forward(self, data):
-        # [signal, W, signal_support, N_nodes, int(label)]
+        # data: [node_features, A, graph_support, N_nodes, label]
         if self.shuffle_nodes:
+            # shuffle nodes to make sure that the model does not adapt to nodes order (happens in some cases)
             N = data[0].shape[1]
             idx = torch.randperm(N)
             data = (data[0][:, idx], data[1][:, idx, :][:, :, idx], data[2][:, idx], data[3])
-        plot = -1
-        N_nodes_tmp = -1
+        
+        sample_id_vis, N_nodes_vis = -1, -1
         for layer, gconv in enumerate(self.gconv):
             N_nodes = data[3]
             N_nodes_max = N_nodes.max()
-            #print('layer', layer, N_nodes_max)
+            
+            # TODO: remove dummy or dropped nodes for speeding up forward/backward passes
             #data = (data[0][:, :N_nodes_max], data[1][:, :N_nodes_max, :N_nodes_max], data[2][:, :N_nodes_max], data[3])      
+            
             B, N, _ = data[0].shape
-            if layer < len(self.gconv) - 1 and self.visualize:      
-                x, W = data[:2]
+            
+            # visualize data
+            if self.visualize and layer < len(self.gconv) - 1:      
+                x, A = data[:2]
                 for b in range(B):
-                    if (layer == 0 and N_nodes[b] < 20 and N_nodes[b] > 10) or plot > -1:
-                        if plot > -1 and plot != b:
+                    if (layer == 0 and N_nodes[b] < 20 and N_nodes[b] > 10) or sample_id_vis > -1:
+                        if sample_id_vis > -1 and sample_id_vis != b:
                             continue
-                        if N_nodes_tmp < 0:
-                            N_nodes_tmp = N_nodes[b]
+                        if N_nodes_vis < 0:
+                            N_nodes_vis = N_nodes[b]
                         plt.figure()
-                        plt.imshow(W[b][:N_nodes_tmp, :N_nodes_tmp].data.cpu().numpy())
+                        plt.imshow(A[b][:N_nodes_vis, :N_nodes_vis].data.cpu().numpy())
                         plt.title('layer %d, Input adjacency matrix' % (layer))
-                        #plt.tight_layout()
                         plt.savefig('input_adjacency_%d.png' % layer)
-                        plot = b                        
+                        sample_id_vis = b                        
                         break
-            mask = data[2].clone()
-            data = gconv(data)
-            x, W = data
+            
+            mask = data[2].clone()  # clone as we are going to make inplace changes
+            data = gconv(data)  # graph convolution
+            x, A = data
             if layer < len(self.gconv) - 1:
                 B, N, C = x.shape
-                y = torch.mm(x.view(B * N, C), self.proj[layer]).view(B, N)
+                y = torch.mm(x.view(B * N, C), self.proj[layer]).view(B, N)  # project features
                 y = y / (torch.sum(self.proj[layer] ** 2).view(1, 1) ** 0.5)  # node scores used for ranking below
-                idx = torch.sort(y, dim=1)[1]  # B,N                
-                N_remove = (N_nodes.float() * (1 - self.pooling_ratios[layer])).long()
+                idx = torch.sort(y, dim=1)[1]  # get indices of y values in the ascending order                
+                N_remove = (N_nodes.float() * (1 - self.pooling_ratios[layer])).long()  # number of removed nodes
+                
+                # sanity checks
                 assert torch.all(N_nodes > N_remove), 'the number of removed nodes must be large than the number of nodes'
                 for b in range(B):
+                    # check that mask corresponds to the actual (non-dummy) nodes
                     assert torch.sum(mask[b]) == float(N_nodes[b]), (torch.sum(mask[b]), N_nodes[b])
+                
                 N_nodes_prev = N_nodes
                 N_nodes = N_nodes - N_remove
                                 
                 for b in range(B):
-                    idx_b = idx[b, mask[b, idx[b]] == 1]
-                    assert len(idx_b) >= N_nodes[b], (len(idx_b), N_nodes[b])
-                    mask[b, idx_b[:N_remove[b]]] = 0
+                    idx_b = idx[b, mask[b, idx[b]] == 1]  # take indices of non-dummy nodes for current data example
+                    assert len(idx_b) >= N_nodes[b], (len(idx_b), N_nodes[b])  # number of indices must be at least as the number of nodes
+                    mask[b, idx_b[:N_remove[b]]] = 0  # set mask values corresponding to the smallest y-values to 0
+                
+                # sanity checks
                 for b in range(B):
+                    # check that the new mask corresponds to the actual (non-dummy) nodes
                     assert torch.sum(mask[b]) == float(N_nodes[b]), (b, torch.sum(mask[b]), N_nodes[b], N_remove[b], N_nodes_prev[b])
+                    # make sure that y-values of selected nodes are larger than of dropped nodes
                     s = torch.sum(y[b] >= torch.min((y * mask.float())[b]))
                     assert s >= float(N_nodes[b]), (s, N_nodes[b], (y * mask.float())[b])
                 
                 mask = mask.unsqueeze(2)
-                x = x * torch.tanh(y).unsqueeze(2) * mask
-                W = mask * W * mask.view(B, 1, N)
+                x = x * torch.tanh(y).unsqueeze(2) * mask  # propagate only part of nodes using the mask
+                A = mask * A * mask.view(B, 1, N)
                 mask = mask.squeeze()
-                data = (x, W, mask, N_nodes)
+                data = (x, A, mask, N_nodes)
                 
-                if self.visualize and plot > -1:
-                    b = plot
+                # visualize data
+                if self.visualize and sample_id_vis > -1:
+                    b = sample_id_vis
                     plt.figure()
-                    plt.imshow(y[b].view(N, 1).expand(N, 2)[:N_nodes_tmp].data.cpu().numpy())
+                    plt.imshow(y[b].view(N, 1).expand(N, 2)[:N_nodes_vis].data.cpu().numpy())
                     plt.title('Node ranking')
                     plt.colorbar()
-                    #plt.tight_layout()
                     plt.savefig('nodes_ranking_%d.png' % layer)
                     plt.figure()
-                    plt.imshow(mask[b].view(N, 1).expand(N, 2)[:N_nodes_tmp].data.cpu().numpy())
+                    plt.imshow(mask[b].view(N, 1).expand(N, 2)[:N_nodes_vis].data.cpu().numpy())
                     plt.title('Pooled nodes (%d/%d)' % (mask[b].sum(), N_nodes_prev[b]))
-                    #plt.tight_layout()
                     plt.savefig('pooled_nodes_mask_%d.png' % layer)
                     plt.figure()
-                    plt.imshow(W[b][:N_nodes_tmp, :N_nodes_tmp].data.cpu().numpy())
+                    plt.imshow(A[b][:N_nodes_vis, :N_nodes_vis].data.cpu().numpy())
                     plt.title('Pooled adjacency matrix')
-                    #plt.tight_layout()
                     plt.savefig('pooled_adjacency_%d.png' % layer)
                         
-        if self.visualize and plot > -1:
-            self.visualize = False
+        if self.visualize and sample_id_vis > -1:
+            self.visualize = False  # to prevent visualization for the following batches
+            
         x = torch.max(x, dim=1)[0].squeeze()  # max pooling over nodes
         x = self.fc(x)
         return x
@@ -578,7 +589,7 @@ for fold_id in range(n_folds):
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f} (avg: {:.6f}) \tsec/iter: {:.4f}'.format(
                     epoch, n_samples, len(train_loader.dataset),
                     100. * (batch_idx + 1) / len(train_loader), loss.item(), train_loss / n_samples, time_iter / (batch_idx + 1) ))
-    #             break 
+    
     def test(test_loader):
         model.eval()
         start = time.time()
