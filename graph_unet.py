@@ -21,7 +21,7 @@ print('using torch', torch.__version__)
 
 # Experiment parameters
 parser = argparse.ArgumentParser(description='Graph Convolutional Networks')
-parser.add_argument('--dataset', type=str, default='proteins')
+parser.add_argument('--dataset', type=str, default='PROTEINS')
 parser.add_argument('--model', type=str, default='gcn', choices=['gcn', 'unet'])
 parser.add_argument('--lr', type=float, default=0.005, help='learning rate')
 parser.add_argument('--lr_decay_steps', type=str, default='25,35', help='learning rate')
@@ -502,7 +502,7 @@ class GraphUnet(nn.Module):
         return x
         
 print('Loading data')
-datareader = DataReader(data_dir='./data/%s/' % args.dataset.upper(),
+datareader = DataReader(data_dir='./data/%s/' % args.dataset,
                         rnd_state=np.random.RandomState(args.seed),
                         folds=n_folds,                    
                         use_cont_node_attr=args.use_cont_node_attr)
