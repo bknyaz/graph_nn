@@ -575,12 +575,12 @@ class MGCN(nn.Module):
         assert x_i[-1, N + 1, 0] == x[-1, 1, 0], ('invalid indexing', x_i[-1, N + 1, 0], x[-1, 1, 0])
 
         A_pred = 0.5 * (self.edge_pred(torch.cat((x_i, x_j), 2)) + self.edge_pred(torch.cat((x_j, x_i), 2)))
-        A_pred = A_pred.view(B, N, N, 1)
-        A_pred = A_pred * data[2]  # remove predicted values for dummy nodes
+        mask = data[2].unsqueeze(2)
+        A_pred = mask * A_pred.view(B, N, N) * mask.view(B, 1, N)  # remove predicted values for dummy nodes
         A_pred = torch.exp(A_pred)
         
         # Use both annotated and predicted adjacency matrices to learn a GCN
-        data = (x, torch.cat((data[1].unsqueeze(3), A_pred), 3))
+        data = (x, torch.cat((data[1].unsqueeze(3), A_pred.unsqueeze(3)), 3))
         x = self.gconv(data)[0]
         x = torch.max(x, dim=1)[0].squeeze()  # max pooling over nodes
         x = self.fc(x)
