@@ -22,7 +22,7 @@ print('using torch', torch.__version__)
 # Experiment parameters
 parser = argparse.ArgumentParser(description='Graph Convolutional Networks')
 parser.add_argument('--dataset', type=str, default='PROTEINS')
-parser.add_argument('--model', type=str, default='gcn', choices=['gcn', 'unet'])
+parser.add_argument('--model', type=str, default='gcn', choices=['gcn', 'unet', 'mgcn'])
 parser.add_argument('--lr', type=float, default=0.005, help='learning rate')
 parser.add_argument('--lr_decay_steps', type=str, default='25,35', help='learning rate')
 parser.add_argument('--wd', type=float, default=1e-4, help='weight decay')
@@ -299,13 +299,15 @@ class GraphConv(nn.Module):
     def __init__(self,
                 in_features,
                 out_features,
+                n_relations=1,  # number of relation types (adjacency matrices)
                 activation=None,
                 adj_sq=False,
                 scale_identity=False):
         super(GraphConv, self).__init__()
-        self.fc = nn.Linear(in_features=in_features, out_features=out_features)
-        self.adj_sq = adj_sq
+        self.fc = nn.Linear(in_features=in_features * n_relations, out_features=out_features)
+        self.n_relations = n_relations
         self.activation = activation
+        self.adj_sq = adj_sq
         self.scale_identity = scale_identity
             
     def laplacian_batch(self, A):
@@ -322,7 +324,14 @@ class GraphConv(nn.Module):
 
     def forward(self, data):
         x, A = data[:2]
-        x = self.fc(torch.bmm(self.laplacian_batch(A), x))
+        if len(A.shape) == 2 or self.n_relations == 1:
+            x = self.fc(torch.bmm(self.laplacian_batch(A), x))
+        else:
+            x_hat = []
+            for rel in range(self.n_relations):
+                x_hat.append(torch.bmm(self.laplacian_batch(A[:, :, :, rel]), x))
+            x = self.fc(torch.cat(x_hat, 2))
+            
         if self.activation is not None:
             x = self.activation(x)
         return (x, A)
@@ -511,6 +520,71 @@ class GraphUnet(nn.Module):
         x = torch.max(x, dim=1)[0].squeeze()  # max pooling over nodes
         x = self.fc(x)
         return x
+
+class MGCN(nn.Module):
+    '''
+    Multigraph Convolutional Network based on (B. Knyazev et al., "Spectral Multigraph Networks for Discovering and Fusing Relationships in Molecules")
+    '''
+    def __init__(self,
+                 in_features,
+                 out_features,
+                 n_relations,
+                 filters=[64,64,64],
+                 n_hidden=0,
+                 dropout=0.2,
+                 adj_sq=False,
+                 scale_identity=False):
+        super(MGCN, self).__init__()
+
+        # Graph convolution layers
+        self.gconv = nn.Sequential(*([GraphConv(in_features=in_features if layer == 0 else filters[layer - 1], 
+                                                out_features=f,
+                                                n_relations=n_relations,
+                                                activation=nn.ReLU(inplace=True),
+                                                adj_sq=adj_sq,
+                                                scale_identity=scale_identity) for layer, f in enumerate(filters)]))
+        
+        # Edge prediction NN
+        self.edge_pred = nn.Sequential(nn.Linear(in_features * 2, 32), 
+                                       nn.ReLU(inplace=True),
+                                       nn.Linear(32, 1))
+        
+        # Fully connected layers
+        fc = []
+        if dropout > 0:
+            fc.append(nn.Dropout(p=dropout))
+        if n_hidden > 0:
+            fc.append(nn.Linear(filters[-1], n_hidden))
+            if dropout > 0:
+                fc.append(nn.Dropout(p=dropout))
+            n_last = n_hidden
+        else:
+            n_last = filters[-1]
+        fc.append(nn.Linear(n_last, out_features))       
+        self.fc = nn.Sequential(*fc)
+        
+    def forward(self, data):
+        # data: [node_features, A, graph_support, N_nodes, label]
+        
+        # Predict edges based on features
+        x = data[0]
+        B, N, C = x.shape
+        node_i = np.repeat(np.arange(N), N)
+        node_j = np.tile(np.arange(N), N)
+        x_i, x_j = x[:, node_i, :], x[:, node_j, :]
+        assert x_i[-1, N + 1, 0] == x[-1, 1, 0], ('invalid indexing', x_i[-1, N + 1, 0], x[-1, 1, 0])
+
+        A_pred = 0.5 * (self.edge_pred(torch.cat((x_i, x_j), 2)) + self.edge_pred(torch.cat((x_j, x_i), 2)))
+        A_pred = A_pred.view(B, N, N, 1)
+        A_pred = A_pred * data[2]  # remove predicted values for dummy nodes
+        A_pred = torch.exp(A_pred)
+        
+        # Use both annotated and predicted adjacency matrices to learn a GCN
+        data = (x, torch.cat((data[1].unsqueeze(3), A_pred), 3))
+        x = self.gconv(data)[0]
+        x = torch.max(x, dim=1)[0].squeeze()  # max pooling over nodes
+        x = self.fc(x)
+        return x
         
 print('Loading data')
 datareader = DataReader(data_dir='./data/%s/' % args.dataset,
@@ -551,6 +625,16 @@ for fold_id in range(n_folds):
                           scale_identity=args.scale_identity,
                           shuffle_nodes=args.shuffle_nodes,
                           visualize=args.visualize).to(args.device)
+    elif args.model == 'mgcn':
+        model = MGCN(in_features=loaders[0].dataset.features_dim,
+                    out_features=loaders[0].dataset.n_classes,
+                    n_relations=2,
+                    n_hidden=args.n_hidden,
+                    filters=args.filters,
+                    dropout=args.dropout,
+                    adj_sq=args.adj_sq,
+                    scale_identity=args.scale_identity).to(args.device)
+    
     else:
         raise NotImplementedError(args.model)
 
@@ -624,4 +708,3 @@ for fold_id in range(n_folds):
 
 print(acc_folds)
 print('{}-fold cross validation avg acc (+- std): {} ({})'.format(n_folds, np.mean(acc_folds), np.std(acc_folds)))
-
