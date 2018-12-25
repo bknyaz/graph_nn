@@ -21,15 +21,33 @@ python graph_unet.py --model unet  # to run Graph U-Net
 python graph_unet.py --model mgcn  # to run Multigraph GCN
 ```
 
-| Model                 | PROTEINS          
-| --------------------- |:-------------:|
-| GCN [[3](https://arxiv.org/abs/1609.02907)]                                   | 76.09 ± 0.69 |
-| GCN [[3](https://arxiv.org/abs/1609.02907)] + *A<sup>2</sup>*                 | 75.76 ± 0.54 |
-| GCN [[3](https://arxiv.org/abs/1609.02907)] + *A<sup>2</sup>* + *2I*          | 75.35 ± 0.57 |
-| Graph U-Net [[1](https://openreview.net/forum?id=HJePRoAct7), [2](https://arxiv.org/abs/1811.01287)]                           | 72.95 ± 1.09 |
-| Graph U-Net [[1](https://openreview.net/forum?id=HJePRoAct7), [2](https://arxiv.org/abs/1811.01287)] + *A<sup>2</sup>*         | 74.18 ± 0.92 |
-| Graph U-Net [[1](https://openreview.net/forum?id=HJePRoAct7), [2](https://arxiv.org/abs/1811.01287)] + *A<sup>2</sup>* + *2I*  | 73.56 ± 0.64 |
-| Multigraph GCN (MGCN) [[4](https://arxiv.org/abs/1811.09595)]  | 76.94 ± 0.54 |
+Repeating 10 times for different seeds:
+```
+for i in $(seq 1 10); do seed=$(( ( RANDOM % 10000 )  + 1 )); python graph_unet.py --model gcn --seed $seed | tee logs/gcn_proteins_"$i".log; done
+```
+
+Then reading log files can be done as following:
+```
+results_dir = './logs'
+acc = []
+for f in os.listdir(results_dir):
+    with open(pjoin(results_dir, f), 'r') as fp:
+        s = fp.readlines()[-1]        
+    pos1 = s.find(':')
+    acc.append(float(s[pos1+1:s[pos1:].find('(') + pos1]))
+print(len(acc), np.mean(acc), np.std(acc))
+```
+
+Average and std of accuracy for 10-fold cross-validation. We also repeat experiments 10 times (as shown above) for different random seeds and report average and std over those 10 times.
+| Model                 | PROTEINS | PROTEINS (10 times)
+| --------------------- |:-------------:|:-------------:|
+| GCN [[3](https://arxiv.org/abs/1609.02907)]                                   | 74.71 ± 3.44 | 74.37 ± 0.31 |
+| GCN [[3](https://arxiv.org/abs/1609.02907)] + *A<sup>2</sup>*                 |  | |
+| GCN [[3](https://arxiv.org/abs/1609.02907)] + *A<sup>2</sup>* + *2I*          |  | |
+| Graph U-Net [[1](https://openreview.net/forum?id=HJePRoAct7), [2](https://arxiv.org/abs/1811.01287)]                           | 72.39 ± 3.34 |  |
+| Graph U-Net [[1](https://openreview.net/forum?id=HJePRoAct7), [2](https://arxiv.org/abs/1811.01287)] + *A<sup>2</sup>*         |  | |
+| Graph U-Net [[1](https://openreview.net/forum?id=HJePRoAct7), [2](https://arxiv.org/abs/1811.01287)] + *A<sup>2</sup>* + *2I*  |  | |
+| Multigraph GCN (MGCN) [[4](https://arxiv.org/abs/1811.09595)]  | 74.62 ± 2.56 | 
 
 # Requirements
 
