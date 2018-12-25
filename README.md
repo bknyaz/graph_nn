@@ -10,7 +10,7 @@ This repository contains all necessary data for the PROTEINS dataset. It can be 
 The baseline model is Graph Convolutional Network (GCN) [[3](https://arxiv.org/abs/1609.02907)].
 The decoder part of Graph U-Net is not implemented yet in our code, i.e. the only difference with the baseline is using pooling based on dropping nodes between graph convolution layers.
 
-Hyperparameters are taken from [[2](https://arxiv.org/abs/1811.01287)], but learning rate decay and dropout is also applied. The readout layer (last pooling layer over nodes) is also simplified to just ```max``` pooling over nodes.
+Hyperparameters are taken from [[2](https://arxiv.org/abs/1811.01287)], but learning rate decay and dropout is also applied. The readout layer (last pooling layer over nodes) is also simplified to just `max` pooling over nodes.
 All hyperparameters are the same for the baseline, Graph U-Net and Multigraph GCN (MGCN).
 
 Implementation is very basic without much optimization, so that it is easier to debug and play around with the code.
