@@ -15,19 +15,19 @@ All hyperparameters are the same for the baseline, Graph U-Net and Multigraph GC
 
 Implementation is very basic without much optimization, so that it is easier to debug and play around with the code.
 
-```
+```bash
 python graph_unet.py --model gcn  # to run baseline GCN
 python graph_unet.py --model unet  # to run Graph U-Net
 python graph_unet.py --model mgcn  # to run Multigraph GCN
 ```
 
 Repeating 10 times for different seeds:
-```
+```bash
 for i in $(seq 1 10); do seed=$(( ( RANDOM % 10000 )  + 1 )); python graph_unet.py --model gcn --seed $seed | tee logs/gcn_proteins_"$i".log; done
 ```
 
 Then reading log files can be done as following:
-```
+```python
 results_dir = './logs'
 acc = []
 for f in os.listdir(results_dir):
@@ -39,6 +39,7 @@ print(len(acc), np.mean(acc), np.std(acc))
 ```
 
 Average and std of accuracy for 10-fold cross-validation. We also repeat experiments 10 times (as shown above) for different random seeds and report average and std over those 10 times.
+
 | Model                 | PROTEINS | PROTEINS (10 times)
 | --------------------- |:-------------:|:-------------:|
 | GCN [[3](https://arxiv.org/abs/1609.02907)]                                   | 74.71 ± 3.44 | 74.37 ± 0.31 |
@@ -47,13 +48,13 @@ Average and std of accuracy for 10-fold cross-validation. We also repeat experim
 | Graph U-Net [[1](https://openreview.net/forum?id=HJePRoAct7), [2](https://arxiv.org/abs/1811.01287)]                           | 72.39 ± 3.34 |  |
 | Graph U-Net [[1](https://openreview.net/forum?id=HJePRoAct7), [2](https://arxiv.org/abs/1811.01287)] + *A<sup>2</sup>*         |  | |
 | Graph U-Net [[1](https://openreview.net/forum?id=HJePRoAct7), [2](https://arxiv.org/abs/1811.01287)] + *A<sup>2</sup>* + *2I*  |  | |
-| Multigraph GCN (MGCN) [[4](https://arxiv.org/abs/1811.09595)]  | 74.62 ± 2.56 | 
+| Multigraph GCN (MGCN) [[4](https://arxiv.org/abs/1811.09595)]  | 74.62 ± 2.56 | |
 
 # Requirements
 
-The code is tested on Ubuntu 16.04 with pytorch 0.4.1 and Python 3.6, but should work in other environments with pytorch >= 0.4. 
+The code is tested on Ubuntu 16.04 with PyTorch 0.4.1 and Python 3.6. 
 
-The [python file](graph_unet.py) and [jupyter notebook file](graph_unet.ipynb) contain essentially the same code, the notebook file is kept for debugging purposes.
+The [jupyter notebook file](graph_unet.ipynb) is kept for debugging purposes.
 
 # References
 
