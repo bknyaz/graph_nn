@@ -1,6 +1,6 @@
 # Graph pooling based on Graph U-Net
 
-<img src="https://github.com/bknyaz/graph_nn/blob/master/figs/overview.pdf" height="192">
+<img src="https://github.com/bknyaz/graph_nn/blob/master/figs/overview.png" height="192">
 
 Results on one of the graph.
 
