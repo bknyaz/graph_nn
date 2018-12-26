@@ -43,12 +43,12 @@ Average and std of accuracy for 10-fold cross-validation. We also repeat experim
 | Model                 | PROTEINS | PROTEINS (10 times)
 | --------------------- |:-------------:|:-------------:|
 | GCN [[3](https://arxiv.org/abs/1609.02907)]                                   | 74.71 ± 3.44 | 74.37 ± 0.31 |
-| GCN [[3](https://arxiv.org/abs/1609.02907)] + *A<sup>2</sup>*                 |  | |
-| GCN [[3](https://arxiv.org/abs/1609.02907)] + *A<sup>2</sup>* + *2I*          |  | |
-| Graph U-Net [[1](https://openreview.net/forum?id=HJePRoAct7), [2](https://arxiv.org/abs/1811.01287)]                           | 72.39 ± 3.34 |  |
-| Graph U-Net [[1](https://openreview.net/forum?id=HJePRoAct7), [2](https://arxiv.org/abs/1811.01287)] + *A<sup>2</sup>*         |  | |
-| Graph U-Net [[1](https://openreview.net/forum?id=HJePRoAct7), [2](https://arxiv.org/abs/1811.01287)] + *A<sup>2</sup>* + *2I*  |  | |
-| Multigraph GCN (MGCN) [[4](https://arxiv.org/abs/1811.09595)]  | 74.62 ± 2.56 | |
+| GCN [[3](https://arxiv.org/abs/1609.02907)] + *A<sup>2</sup>*                 | 74.36 ± 4.57 | 74.56 ± 0.26 |
+| GCN [[3](https://arxiv.org/abs/1609.02907)] + *A<sup>2</sup>* + *2I*          | 74.45 ± 4.91 | 74.23 ± 0.37 |
+| Graph U-Net [[1](https://openreview.net/forum?id=HJePRoAct7), [2](https://arxiv.org/abs/1811.01287)]                           | 72.39 ± 3.34 | 72.45 ± 0.88  |
+| Graph U-Net [[1](https://openreview.net/forum?id=HJePRoAct7), [2](https://arxiv.org/abs/1811.01287)] + *A<sup>2</sup>*         | 72.90 ± 4.08 | |
+| Graph U-Net [[1](https://openreview.net/forum?id=HJePRoAct7), [2](https://arxiv.org/abs/1811.01287)] + *A<sup>2</sup>* + *2I*  | 73.63 ± 4.67 | |
+| Multigraph GCN (MGCN) [[4](https://arxiv.org/abs/1811.09595)]  | 74.62 ± 2.56 | 75.56 ± 0.27 |
 
 # Requirements
 
