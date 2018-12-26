@@ -1,5 +1,9 @@
 # Graph pooling based on Graph U-Net
 
+<img src="https://github.com/bknyaz/graph_nn/blob/master/figs/overview.pdf" height="192">
+
+Results on one of the graph.
+
 <img src="https://github.com/bknyaz/graph_nn/blob/master/figs/fig.png" height="192">
 
 My attempt to reproduce graph classification results from recent papers [[1](https://openreview.net/forum?id=HJePRoAct7), [2](https://arxiv.org/abs/1811.01287)] using Graph U-Net. So far, my results using Graph U-Net are worse than the baseline (GCN).
@@ -52,7 +56,7 @@ Average and std of accuracy for 10-fold cross-validation. We also repeat experim
 
 # Requirements
 
-The code is tested on Ubuntu 16.04 with PyTorch 0.4.1 and Python 3.6. 
+The code is tested on Ubuntu 16.04 with PyTorch 0.4.1/1.0.0 and Python 3.6.
 
 The [jupyter notebook file](graph_unet.ipynb) is kept for debugging purposes.
 
