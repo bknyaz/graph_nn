@@ -69,6 +69,8 @@ additional attributes, so algorithms should be compared fairly.
 | --------------------- |:-------------:|:-------------:|
 | GCN [[3](https://arxiv.org/abs/1609.02907)] | 32.33 ± 5.07<sup>1</sup> | 51.17 ± 5.63<sup>2</sup> |
 | Graph U-Net [[1](https://openreview.net/forum?id=HJePRoAct7), [2](https://arxiv.org/abs/1811.01287)] | 33.00 ± 4.88 | 48.33 ± 6.32 |
+| Multigraph GCN (MGCN) [[4](https://arxiv.org/abs/1811.09595)] | 40.50 ± 5.58 | 59.83 ± 6.56 |
+
 
 These results were obtained by running (similarly for Graph U-Net):
 
