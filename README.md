@@ -1,11 +1,6 @@
-# Graph pooling based on Graph U-Net
+# Graph neural networks
 
 ## Overview
-<img src="figs/overview.png" height="192">
-
-Results on one of the graph.
-
-<img src="figs/fig.png" height="192">
 
 My attempt to reproduce graph classification results from recent papers [[1](https://openreview.net/forum?id=HJePRoAct7), [2](https://arxiv.org/abs/1811.01287)] using Graph U-Net. So far, my results using Graph U-Net are worse than the baseline (GCN).
 I also compare to a recent work on Multigraph GCN (MGCN) [[4](https://arxiv.org/abs/1811.09595)].
@@ -82,6 +77,12 @@ These results were obtained by running (similarly for Graph U-Net):
 
 Here, `lr_decay_step` can be any number larger than the number of epochs to avoid learning rate decay.
 
+### Overvew of pooling based on Graph U-Net
+<img src="figs/overview.png" height="192">
+
+### Results of Graph U-Net pooling on one of the graph
+
+<img src="figs/fig.png" height="192">
 
 ## Requirements
 
