@@ -367,6 +367,7 @@ class GCN(nn.Module):
             fc.append(nn.Dropout(p=dropout))
         if n_hidden > 0:
             fc.append(nn.Linear(filters[-1], n_hidden))
+            fc.append(nn.ReLU(inplace=True))
             if dropout > 0:
                 fc.append(nn.Dropout(p=dropout))
             n_last = n_hidden
@@ -470,7 +471,7 @@ class GraphUnet(nn.Module):
                 B, N, C = x.shape
                 y = torch.mm(x.view(B * N, C), self.proj[layer]).view(B, N)  # project features
                 y = y / (torch.sum(self.proj[layer] ** 2).view(1, 1) ** 0.5)  # node scores used for ranking below
-                idx = torch.sort(y, dim=1)[1]  # get indices of y values in the ascending order                
+                idx = torch.sort(y, dim=1)[1]  # get indices of y values in the ascending order
                 N_remove = (N_nodes.float() * (1 - self.pooling_ratios[layer])).long()  # number of removed nodes
 
                 # sanity checks
