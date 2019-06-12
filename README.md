@@ -27,7 +27,7 @@ Implementation is very basic without much optimization, so that it is easier to 
 python graph_unet.py --model gcn  # to run baseline GCN
 python graph_unet.py --model unet  # to run Graph U-Net
 python graph_unet.py --model mgcn  # to run Multigraph GCN
-python graph_unet.py --model mgcn -K 3  # to run Multigraph ChebNet with filter scale K = 3
+python graph_unet.py --model mgcn -K 2  # to run Multigraph ChebNet with filter scale K = 2
 ```
 
 To use the [PyTorch Geometric](https://github.com/rusty1s/pytorch_geometric) data loader, add flag `--torch-geom` or `-g`.
@@ -63,7 +63,7 @@ Average and std of accuracy for 10-fold cross-validation (left column). We also 
 | Graph U-Net [[1](https://openreview.net/forum?id=HJePRoAct7), [2](https://arxiv.org/abs/1811.01287)] + *A<sup>2</sup>* + *2I*  | 73.63 ± 4.67 | 73.18 ± 0.50 |
 | Multigraph GCN (MGCN) [[4](https://arxiv.org/abs/1811.09595)]  | 74.62 ± 2.56 | 75.56 ± 0.27 |
 | Multigraph ChebNet (K=2) [[4](https://arxiv.org/abs/1811.09595)] | 74.29 ± 1.82 |	75.31 ± 0.47 |
-| Multigraph ChebNet (K=2) [[4](https://arxiv.org/abs/1811.09595)] | **76.27 ± 2.82**<sup>1</sup> |  <sup>1</sup> |
+| Multigraph ChebNet (K=2) [[4](https://arxiv.org/abs/1811.09595)] | **76.27 ± 2.82** |  **76.05 ± 0.50**<sup>1</sup> |
 
 *74.72 ± 2.90 with PyTorch 1.0.0.
 
