@@ -30,6 +30,7 @@ parser.add_argument('--lr_decay_steps', type=str, default='25,35', help='learnin
 parser.add_argument('--wd', type=float, default=1e-4, help='weight decay')
 parser.add_argument('-d', '--dropout', type=float, default=0.1, help='dropout rate')
 parser.add_argument('-f', '--filters', type=str, default='64,64,64', help='number of filters in each layer')
+parser.add_argument('-K', '--filter_scale', type=int, default=1, help='filter scale (receptive field size), must be > 0; 1 for GCN, >1 for ChebNet')
 parser.add_argument('--n_hidden', type=int, default=0,
                     help='number of hidden units in a fully connected layer after the last conv layer')
 parser.add_argument('--epochs', type=int, default=40, help='number of epochs')
@@ -121,7 +122,8 @@ if not args.torch_geom:
 
     class DataReader():
         '''
-        Class to read the txt files containing all data of the dataset
+        Class to read the txt files containing all data of the dataset.
+        Should work for any dataset from https://ls11-www.cs.tu-dortmund.de/staff/morris/graphkerneldatasets
         '''
 
         def __init__(self,
@@ -289,7 +291,8 @@ if not args.torch_geom:
 # NN layers and models
 class GraphConv(nn.Module):
     '''
-    Graph Convolution Layer according to (T. Kipf and M. Welling, ICLR 2017)
+    Graph Convolution Layer according to (T. Kipf and M. Welling, ICLR 2017) if K<=1
+    Chebyshev Graph Convolution Layer according to (M. Defferrard, X. Bresson, and P. Vandergheynst, NIPS 2017) if K>1
     Additional tricks (power of adjacency matrix and weighted self connections) as in the Graph U-Net paper
     '''
 
@@ -297,24 +300,43 @@ class GraphConv(nn.Module):
                  in_features,
                  out_features,
                  n_relations=1,  # number of relation types (adjacency matrices)
+                 K=1,  # GCN is K<=1, else ChebNet
                  activation=None,
                  adj_sq=False,
                  scale_identity=False):
         super(GraphConv, self).__init__()
-        self.fc = nn.Linear(in_features=in_features * n_relations, out_features=out_features)
+        self.fc = nn.Linear(in_features=in_features * K * n_relations, out_features=out_features)
         self.n_relations = n_relations
+        assert K > 0, ('filter scale must be greater than 0', K)
+        self.K = K
         self.activation = activation
         self.adj_sq = adj_sq
         self.scale_identity = scale_identity
+
+    def chebyshev_basis(self, L, X, K):
+        if K > 1:
+            Xt = [X]
+            Xt.append(torch.bmm(L, X))  # B,N,F
+            for k in range(2, K):
+                Xt.append(2 * torch.bmm(L, Xt[k - 1]) - Xt[k - 2])  # B,N,F
+            Xt = torch.cat(Xt, dim=2)  # B,N,K,F
+            return Xt
+        else:
+            # GCN
+            assert K == 1, K
+            return torch.bmm(L, X)  # B,N,1,F
 
     def laplacian_batch(self, A):
         batch, N = A.shape[:2]
         if self.adj_sq:
             A = torch.bmm(A, A)  # use A^2 to increase graph connectivity
-        I = torch.eye(N).unsqueeze(0).to(args.device)
-        if self.scale_identity:
-            I = 2 * I  # increase weight of self connections
-        A_hat = A + I
+        A_hat = A
+        if self.K < 2 or self.scale_identity:
+            I = torch.eye(N).unsqueeze(0).to(args.device)
+            if self.scale_identity:
+                I = 2 * I  # increase weight of self connections
+            if self.K < 2:
+                A_hat = A + I
         D_hat = (torch.sum(A_hat, 1) + 1e-5) ** (-0.5)
         L = D_hat.view(batch, N, 1) * A_hat * D_hat.view(batch, 1, N)
         return L
@@ -325,8 +347,10 @@ class GraphConv(nn.Module):
         if len(A.shape) == 3:
             A = A.unsqueeze(3)
         x_hat = []
+
         for rel in range(self.n_relations):
-            x_hat.append(torch.bmm(self.laplacian_batch(A[:, :, :, rel]), x))
+            L = self.laplacian_batch(A[:, :, :, rel])
+            x_hat.append(self.chebyshev_basis(L, x, self.K))
         x = self.fc(torch.cat(x_hat, 2))
 
         if len(mask.shape) == 2:
@@ -348,6 +372,7 @@ class GCN(nn.Module):
                  in_features,
                  out_features,
                  filters=[64, 64, 64],
+                 K=1,
                  n_hidden=0,
                  dropout=0.2,
                  adj_sq=False,
@@ -357,6 +382,7 @@ class GCN(nn.Module):
         # Graph convolution layers
         self.gconv = nn.Sequential(*([GraphConv(in_features=in_features if layer == 0 else filters[layer - 1],
                                                 out_features=f,
+                                                K=K,
                                                 activation=nn.ReLU(inplace=True),
                                                 adj_sq=adj_sq,
                                                 scale_identity=scale_identity) for layer, f in enumerate(filters)]))
@@ -388,6 +414,7 @@ class GraphUnet(nn.Module):
                  in_features,
                  out_features,
                  filters=[64, 64, 64],
+                 K=1,
                  n_hidden=0,
                  dropout=0.2,
                  adj_sq=False,
@@ -403,6 +430,7 @@ class GraphUnet(nn.Module):
         # Graph convolution layers
         self.gconv = nn.ModuleList([GraphConv(in_features=in_features if layer == 0 else filters[layer - 1],
                                               out_features=f,
+                                              K=K,
                                               activation=nn.ReLU(inplace=True),
                                               adj_sq=adj_sq,
                                               scale_identity=scale_identity) for layer, f in enumerate(filters)])
@@ -541,6 +569,7 @@ class MGCN(nn.Module):
                  out_features,
                  n_relations,
                  filters=[64, 64, 64],
+                 K=1,
                  n_hidden=0,
                  dropout=0.2,
                  adj_sq=False,
@@ -551,6 +580,7 @@ class MGCN(nn.Module):
         self.gconv = nn.Sequential(*([GraphConv(in_features=in_features if layer == 0 else filters[layer - 1],
                                                 out_features=f,
                                                 n_relations=n_relations,
+                                                K=K,
                                                 activation=nn.ReLU(inplace=True),
                                                 adj_sq=adj_sq,
                                                 scale_identity=scale_identity) for layer, f in enumerate(filters)]))
@@ -684,6 +714,7 @@ for fold_id in range(n_folds):
                     out_features=loaders[0].dataset.num_classes,
                     n_hidden=args.n_hidden,
                     filters=args.filters,
+                    K=args.filter_scale,
                     dropout=args.dropout,
                     adj_sq=args.adj_sq,
                     scale_identity=args.scale_identity).to(args.device)
@@ -692,6 +723,7 @@ for fold_id in range(n_folds):
                           out_features=loaders[0].dataset.num_classes,
                           n_hidden=args.n_hidden,
                           filters=args.filters,
+                          K=args.filter_scale,
                           dropout=args.dropout,
                           adj_sq=args.adj_sq,
                           scale_identity=args.scale_identity,
@@ -703,6 +735,7 @@ for fold_id in range(n_folds):
                      n_relations=2,
                      n_hidden=args.n_hidden,
                      filters=args.filters,
+                     K=args.filter_scale,
                      dropout=args.dropout,
                      adj_sq=args.adj_sq,
                      scale_identity=args.scale_identity).to(args.device)
@@ -717,7 +750,6 @@ for fold_id in range(n_folds):
 
     optimizer = optim.Adam(train_params, lr=args.lr, weight_decay=args.wd, betas=(0.5, 0.999))
     scheduler = lr_scheduler.MultiStepLR(optimizer, args.lr_decay_steps, gamma=0.1)
-
 
     # Normalization of continuous node features
     # if args.use_cont_node_attr:
@@ -788,8 +820,8 @@ for fold_id in range(n_folds):
 
     loss_fn = F.cross_entropy
     for epoch in range(args.epochs):
-        train(loaders[0])
-        acc = test(loaders[1])
+        train(loaders[0])  # no need to evaluate after each epoch
+    acc = test(loaders[1])
     acc_folds.append(acc)
 
 print(acc_folds)

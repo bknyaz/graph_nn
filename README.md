@@ -5,10 +5,16 @@
 <img src="figs/overview.png" height="192">
 
 My attempt to reproduce graph classification results from recent papers [[1](https://openreview.net/forum?id=HJePRoAct7), [2](https://arxiv.org/abs/1811.01287)] using Graph U-Net. So far, my results using Graph U-Net are worse than the baseline (GCN).
-I also compare to a recent work on Multigraph GCN (MGCN) [[4](https://arxiv.org/abs/1811.09595)].
 
-This repository contains all necessary data for the PROTEINS dataset. It can be found [here](https://ls11-www.cs.tu-dortmund.de/staff/morris/graphkerneldatasets) along with similar datasets.
+I also compare to our recent work on **Multigraph GCN (MGCN)** and **Multigraph ChebNet** [[4](https://arxiv.org/abs/1811.09595)]. More results are presented in the paper (Table 1).
 
+### Data
+This repository contains all necessary data for the PROTEINS dataset. It can be found [here](https://ls11-www.cs.tu-dortmund.de/people/morris/graphkerneldatasets/) along with similar datasets or in the [data](data) folder of this repo.
+
+Dataset statistics and references to papers are available at [here](https://ls11-www.cs.tu-dortmund.de/staff/morris/graphkerneldatasets).
+
+
+### Models
 The baseline model is Graph Convolutional Network (GCN) [[3](https://arxiv.org/abs/1609.02907)].
 The decoder part of Graph U-Net is not implemented yet in our code, i.e. the only difference with the baseline is using pooling based on dropping nodes between graph convolution layers.
 
@@ -21,6 +27,7 @@ Implementation is very basic without much optimization, so that it is easier to 
 python graph_unet.py --model gcn  # to run baseline GCN
 python graph_unet.py --model unet  # to run Graph U-Net
 python graph_unet.py --model mgcn  # to run Multigraph GCN
+python graph_unet.py --model mgcn -K 3  # to run Multigraph ChebNet with filter scale K = 3
 ```
 
 To use the [PyTorch Geometric](https://github.com/rusty1s/pytorch_geometric) data loader, add flag `--torch-geom`.
@@ -55,8 +62,12 @@ Average and std of accuracy for 10-fold cross-validation. We also repeat experim
 | Graph U-Net [[1](https://openreview.net/forum?id=HJePRoAct7), [2](https://arxiv.org/abs/1811.01287)] + *A<sup>2</sup>*         | 72.90 ± 4.08 | 72.87 ± 0.52 |
 | Graph U-Net [[1](https://openreview.net/forum?id=HJePRoAct7), [2](https://arxiv.org/abs/1811.01287)] + *A<sup>2</sup>* + *2I*  | 73.63 ± 4.67 | 73.18 ± 0.50 |
 | Multigraph GCN (MGCN) [[4](https://arxiv.org/abs/1811.09595)]  | 74.62 ± 2.56 | 75.56 ± 0.27 |
+| Multigraph ChebNet (K=2) [[4](https://arxiv.org/abs/1811.09595)] | 74.29 ± 1.82 | 75.31 ± 0.47 |
+| Multigraph ChebNet** [[4](https://arxiv.org/abs/1811.09595)] | 77.21 ± 3.95 | 76.53 ± 0.36 |
 
 *74.72 ± 2.90 with PyTorch 1.0.0.
+
+**See the paper for hyperparameters.
 
 Some datasets contain additional float-valued node attributes, which can improve graph classification a lot.
 Note that some algorithms, including Weisfeiler-Lehman (WL) Graph Kernels, are not able to make use of these
@@ -67,15 +78,16 @@ additional attributes, so algorithms should be compared fairly.
 | GCN [[3](https://arxiv.org/abs/1609.02907)] | 32.33 ± 5.07<sup>1</sup> | 51.17 ± 5.63<sup>2</sup> |
 | Graph U-Net [[1](https://openreview.net/forum?id=HJePRoAct7), [2](https://arxiv.org/abs/1811.01287)] | 33.00 ± 4.88 | 48.33 ± 6.32 |
 | Multigraph GCN (MGCN) [[4](https://arxiv.org/abs/1811.09595)] | 40.50 ± 5.58 | 59.83 ± 6.56 |
-
+| Multigraph ChebNet (K=4) [[4](https://arxiv.org/abs/1811.09595)]  | 57.33 ± 6.88 | 62.83 ± 6.15 |
+| Multigraph ChebNet** [[4](https://arxiv.org/abs/1811.09595)]  | 61.75 ± 1.33 | - |
 
 These results were obtained by running (similarly for Graph U-Net):
 
 <sup>1</sup>
-```python graph_unet.py -D ENZYMES -f 128,128,128 --n_hidden 256 -g --lr 0.0005 --epochs 100 --lr_decay_step 150```
+```python graph_unet.py -D ENZYMES -f 128,128,128 --n_hidden 256 --lr 0.0005 --epochs 100 --lr_decay_step 15 -g```
 
 <sup>2</sup>
-```python graph_unet.py -D ENZYMES -f 128,128,128 --n_hidden 256 -gc --lr 0.0005 --epochs 100 --lr_decay_step 150```
+```python graph_unet.py -D ENZYMES -f 128,128,128 --n_hidden 256--lr 0.0005 --epochs 100 --lr_decay_step 150 -gc```
 
 Here, `lr_decay_step` can be any number larger than the number of epochs to avoid learning rate decay.
 
