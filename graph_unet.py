@@ -33,8 +33,11 @@ parser.add_argument('-f', '--filters', type=str, default='64,64,64', help='numbe
 parser.add_argument('-K', '--filter_scale', type=int, default=1, help='filter scale (receptive field size), must be > 0; 1 for GCN, >1 for ChebNet')
 parser.add_argument('--n_hidden', type=int, default=0,
                     help='number of hidden units in a fully connected layer after the last conv layer')
+parser.add_argument('--n_hidden_edge', type=int, default=32,
+                    help='number of hidden units in a fully connected layer of the edge prediction network')
 parser.add_argument('--epochs', type=int, default=40, help='number of epochs')
 parser.add_argument('-b', '--batch_size', type=int, default=32, help='batch size')
+parser.add_argument('--bn', action='store_true', default=False, help='use BatchNorm layer')
 parser.add_argument('-t', '--threads', type=int, default=0, help='number of threads to load data')
 parser.add_argument('--log_interval', type=int, default=10, help='interval (number of batches) of logging')
 parser.add_argument('--device', type=str, default='cuda', choices=['cuda', 'cpu'])
@@ -302,6 +305,7 @@ class GraphConv(nn.Module):
                  n_relations=1,  # number of relation types (adjacency matrices)
                  K=1,  # GCN is K<=1, else ChebNet
                  activation=None,
+                 bnorm=False,
                  adj_sq=False,
                  scale_identity=False):
         super(GraphConv, self).__init__()
@@ -310,6 +314,9 @@ class GraphConv(nn.Module):
         assert K > 0, ('filter scale must be greater than 0', K)
         self.K = K
         self.activation = activation
+        self.bnorm = bnorm
+        if self.bnorm:
+            self.bn = nn.BatchNorm1d(out_features)
         self.adj_sq = adj_sq
         self.scale_identity = scale_identity
 
@@ -357,7 +364,9 @@ class GraphConv(nn.Module):
             mask = mask.unsqueeze(2)
 
         x = x * mask  # to make values of dummy nodes zeros again, otherwise the bias is added after applying self.fc which affects node embeddings in the following layers
-        # print('out', x.shape, torch.sum(torch.abs(torch.sum(x, 2)) > 0))
+
+        if self.bnorm:
+            x = self.bn(x.permute(0, 2, 1)).permute(0, 2, 1)
         if self.activation is not None:
             x = self.activation(x)
         return (x, A, mask)
@@ -373,6 +382,7 @@ class GCN(nn.Module):
                  out_features,
                  filters=[64, 64, 64],
                  K=1,
+                 bnorm=False,
                  n_hidden=0,
                  dropout=0.2,
                  adj_sq=False,
@@ -384,6 +394,7 @@ class GCN(nn.Module):
                                                 out_features=f,
                                                 K=K,
                                                 activation=nn.ReLU(inplace=True),
+                                                bnorm=bnorm,
                                                 adj_sq=adj_sq,
                                                 scale_identity=scale_identity) for layer, f in enumerate(filters)]))
 
@@ -415,6 +426,7 @@ class GraphUnet(nn.Module):
                  out_features,
                  filters=[64, 64, 64],
                  K=1,
+                 bnorm=False,
                  n_hidden=0,
                  dropout=0.2,
                  adj_sq=False,
@@ -432,6 +444,7 @@ class GraphUnet(nn.Module):
                                               out_features=f,
                                               K=K,
                                               activation=nn.ReLU(inplace=True),
+                                              bnorm=bnorm,
                                               adj_sq=adj_sq,
                                               scale_identity=scale_identity) for layer, f in enumerate(filters)])
         # Pooling layers
@@ -570,7 +583,9 @@ class MGCN(nn.Module):
                  n_relations,
                  filters=[64, 64, 64],
                  K=1,
+                 bnorm=False,
                  n_hidden=0,
+                 n_hidden_edge=32,
                  dropout=0.2,
                  adj_sq=False,
                  scale_identity=False):
@@ -582,13 +597,14 @@ class MGCN(nn.Module):
                                                 n_relations=n_relations,
                                                 K=K,
                                                 activation=nn.ReLU(inplace=True),
+                                                bnorm=bnorm,
                                                 adj_sq=adj_sq,
                                                 scale_identity=scale_identity) for layer, f in enumerate(filters)]))
 
         # Edge prediction NN
-        self.edge_pred = nn.Sequential(nn.Linear(in_features * 2, 32),
+        self.edge_pred = nn.Sequential(nn.Linear(in_features * 2, n_hidden_edge),
                                        nn.ReLU(inplace=True),
-                                       nn.Linear(32, 1))
+                                       nn.Linear(n_hidden_edge, 1))
 
         # Fully connected layers
         fc = []
@@ -715,6 +731,7 @@ for fold_id in range(n_folds):
                     n_hidden=args.n_hidden,
                     filters=args.filters,
                     K=args.filter_scale,
+                    bnorm=args.bn,
                     dropout=args.dropout,
                     adj_sq=args.adj_sq,
                     scale_identity=args.scale_identity).to(args.device)
@@ -724,6 +741,7 @@ for fold_id in range(n_folds):
                           n_hidden=args.n_hidden,
                           filters=args.filters,
                           K=args.filter_scale,
+                          bnorm=args.bn,
                           dropout=args.dropout,
                           adj_sq=args.adj_sq,
                           scale_identity=args.scale_identity,
@@ -734,8 +752,10 @@ for fold_id in range(n_folds):
                      out_features=loaders[0].dataset.num_classes,
                      n_relations=2,
                      n_hidden=args.n_hidden,
+                     n_hidden_edge=args.n_hidden_edge,
                      filters=args.filters,
                      K=args.filter_scale,
+                     bnorm=args.bn,
                      dropout=args.dropout,
                      adj_sq=args.adj_sq,
                      scale_identity=args.scale_identity).to(args.device)
