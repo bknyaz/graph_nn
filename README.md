@@ -107,7 +107,7 @@ The [jupyter notebook file](graph_unet.ipynb) is kept for debugging purposes.
 **Optionally**:
 
 <a href="https://github.com/rusty1s/pytorch_geometric">
-<img src="https://raw.githubusercontent.com/rusty1s/pytorch_geometric/master/docs/source/_static/img/logo.svg?sanitize=true" height="64">
+<img src="https://raw.githubusercontent.com/rusty1s/pytorch_geometric/master/docs/source/_static/img/pyg_logo_text.svg?sanitize=true" height="64">
 </a>
 
 
