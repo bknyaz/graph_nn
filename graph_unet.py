@@ -35,9 +35,11 @@ parser.add_argument('--n_hidden', type=int, default=0,
                     help='number of hidden units in a fully connected layer after the last conv layer')
 parser.add_argument('--n_hidden_edge', type=int, default=32,
                     help='number of hidden units in a fully connected layer of the edge prediction network')
+parser.add_argument('--degree', action='store_true', default=False, help='use one-hot node degree features')
 parser.add_argument('--epochs', type=int, default=40, help='number of epochs')
 parser.add_argument('-b', '--batch_size', type=int, default=32, help='batch size')
 parser.add_argument('--bn', action='store_true', default=False, help='use BatchNorm layer')
+parser.add_argument('--folds', type=int, default=10, help='number of cross-validation folds (1 for COLORS and TRIANGLES and 10 for other datasets)')
 parser.add_argument('-t', '--threads', type=int, default=0, help='number of threads to load data')
 parser.add_argument('--log_interval', type=int, default=10, help='interval (number of batches) of logging')
 parser.add_argument('--device', type=str, default='cuda', choices=['cuda', 'cpu'])
@@ -57,6 +59,7 @@ args = parser.parse_args()
 
 if args.torch_geom:
     from torch_geometric.datasets import TUDataset
+    import torch_geometric.transforms as T
 
 args.filters = list(map(int, args.filters.split(',')))
 args.lr_decay_steps = list(map(int, args.lr_decay_steps.split(',')))
@@ -64,7 +67,7 @@ args.lr_decay_steps = list(map(int, args.lr_decay_steps.split(',')))
 for arg in vars(args):
     print(arg, getattr(args, arg))
 
-n_folds = 10  # 10-fold cross validation
+n_folds = args.folds  # train,val,test splits for COLORS and TRIANGLES and 10-fold cross validation for other datasets
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = True
 torch.manual_seed(args.seed)
@@ -74,17 +77,29 @@ rnd_state = np.random.RandomState(args.seed)
 
 
 def split_ids(ids, folds=10):
-    n = len(ids)
-    stride = int(np.ceil(n / float(folds)))
-    test_ids = [ids[i: i + stride] for i in range(0, n, stride)]
-    assert np.all(
-        np.unique(np.concatenate(test_ids)) == sorted(ids)), 'some graphs are missing in the test sets'
-    assert len(test_ids) == folds, 'invalid test sets'
-    train_ids = []
-    for fold in range(folds):
-        train_ids.append(np.array([e for e in ids if e not in test_ids[fold]]))
-        assert len(train_ids[fold]) + len(test_ids[fold]) == len(
-            np.unique(list(train_ids[fold]) + list(test_ids[fold]))) == n, 'invalid splits'
+
+    if args.dataset == 'COLORS-3':
+        assert folds == 1, 'this dataset has train, val and test splits'
+        train_ids = [np.arange(500)]
+        val_ids = [np.arange(500, 3000)]
+        test_ids = [np.arange(3000, 10500)]
+    elif args.dataset == 'TRIANGLES':
+        assert folds == 1, 'this dataset has train, val and test splits'
+        train_ids = [np.arange(30000)]
+        val_ids = [np.arange(30000, 35000)]
+        test_ids = [np.arange(35000, 45000)]
+    else:
+        n = len(ids)
+        stride = int(np.ceil(n / float(folds)))
+        test_ids = [ids[i: i + stride] for i in range(0, n, stride)]
+        assert np.all(
+            np.unique(np.concatenate(test_ids)) == sorted(ids)), 'some graphs are missing in the test sets'
+        assert len(test_ids) == folds, 'invalid test sets'
+        train_ids = []
+        for fold in range(folds):
+            train_ids.append(np.array([e for e in ids if e not in test_ids[fold]]))
+            assert len(train_ids[fold]) + len(test_ids[fold]) == len(
+                np.unique(list(train_ids[fold]) + list(test_ids[fold]))) == n, 'invalid splits'
 
     return train_ids, test_ids
 
@@ -143,11 +158,17 @@ if not args.torch_geom:
             data = {}
             nodes, graphs = self.read_graph_nodes_relations(
                 list(filter(lambda f: f.find('graph_indicator') >= 0, files))[0])
-            data['features'] = self.read_node_features(list(filter(lambda f: f.find('node_labels') >= 0, files))[0],
-                                                       nodes, graphs, fn=lambda s: int(s.strip()))
+
             data['adj_list'] = self.read_graph_adj(list(filter(lambda f: f.find('_A') >= 0, files))[0], nodes, graphs)
+
+            node_labels_file = list(filter(lambda f: f.find('node_labels') >= 0, files))
+            if len(node_labels_file) == 1:
+                data['features'] = self.read_node_features(node_labels_file[0], nodes, graphs, fn=lambda s: int(s.strip()))
+            else:
+                data['features'] = None
+
             data['targets'] = np.array(
-                self.parse_txt_file(list(filter(lambda f: f.find('graph_labels') >= 0, files))[0],
+                self.parse_txt_file(list(filter(lambda f: f.find('graph_labels') >= 0 or f.find('graph_attributes') >= 0, files))[0],
                                     line_parse_fn=lambda s: int(float(s.strip()))))
 
             if self.use_cont_node_attr:
@@ -160,30 +181,54 @@ if not args.torch_geom:
                 N = len(adj)  # number of nodes
                 if data['features'] is not None:
                     assert N == len(data['features'][sample_id]), (N, len(data['features'][sample_id]))
+                if not np.allclose(adj, adj.T):
+                    print(sample_id, 'not symmetric')
                 n = np.sum(adj)  # total sum of edges
                 assert n % 2 == 0, n
                 n_edges.append(int(n / 2))  # undirected edges, so need to divide by 2
-                if not np.allclose(adj, adj.T):
-                    print(sample_id, 'not symmetric')
                 degrees.extend(list(np.sum(adj, 1)))
-                features.append(np.array(data['features'][sample_id]))
+                if data['features'] is not None:
+                    features.append(np.array(data['features'][sample_id]))
 
             # Create features over graphs as one-hot vectors for each node
-            features_all = np.concatenate(features)
-            features_min = features_all.min()
-            num_features = int(features_all.max() - features_min + 1)  # number of possible values
+            if data['features'] is not None:
+                features_all = np.concatenate(features)
+                features_min = features_all.min()
+                num_features = int(features_all.max() - features_min + 1)  # number of possible values
 
+            max_degree = np.max(degrees)
             features_onehot = []
-            for i, x in enumerate(features):
-                feature_onehot = np.zeros((len(x), num_features))
-                for node, value in enumerate(x):
-                    feature_onehot[node, value - features_min] = 1
+            for sample_id, adj in enumerate(data['adj_list']):
+                N = adj.shape[0]
+                if data['features'] is not None:
+                    x = data['features'][sample_id]
+                    feature_onehot = np.zeros((len(x), num_features))
+                    for node, value in enumerate(x):
+                        feature_onehot[node, value - features_min] = 1
+                else:
+                    feature_onehot = np.empty((N, 0))
                 if self.use_cont_node_attr:
-                    feature_onehot = np.concatenate((feature_onehot, np.array(data['attr'][i])), axis=1)
-                features_onehot.append(feature_onehot)
+                    if args.dataset in ['COLORS-3', 'TRIANGLES']:
+                        # first column corresponds to node attention and shouldn't be used as node features
+                        feature_attr = np.array(data['attr'][sample_id])[:, 1:]
+                    else:
+                        feature_attr = np.array(data['attr'][sample_id])
+                else:
+                    feature_attr = np.empty((N, 0))
+                if args.degree:
+                    degree_onehot = np.zeros((N, max_degree + 1))
+                    degree_onehot[np.arange(N), np.sum(adj, 1).astype(np.int32)] = 1
+                else:
+                    degree_onehot = np.empty((N, 0))
 
-            if self.use_cont_node_attr:
-                num_features = features_onehot[0].shape[1]
+                node_features = np.concatenate((feature_onehot, feature_attr, degree_onehot), axis=1)
+                if node_features.shape[1] == 0:
+                    # dummy features for datasets without node labels/attributes
+                    # node degree features can be used instead
+                    node_features = np.ones((N, 1))
+                features_onehot.append(node_features)
+
+            num_features = features_onehot[0].shape[1]
 
             shapes = [len(adj) for adj in data['adj_list']]
             labels = data['targets']  # graph class labels
@@ -213,18 +258,19 @@ if not args.torch_geom:
             for lbl in classes:
                 print('Class %d: \t\t\t%d samples' % (lbl, np.sum(labels == lbl)))
 
-            for u in np.unique(features_all):
-                print('feature {}, count {}/{}'.format(u, np.count_nonzero(features_all == u), len(features_all)))
+            if data['features'] is not None:
+                for u in np.unique(features_all):
+                    print('feature {}, count {}/{}'.format(u, np.count_nonzero(features_all == u), len(features_all)))
 
             N_graphs = len(labels)  # number of samples (graphs) in data
             assert N_graphs == len(data['adj_list']) == len(features_onehot), 'invalid data'
 
-            # Create test sets first
+            # Create train/test sets first
             train_ids, test_ids = split_ids(rnd_state.permutation(N_graphs), folds=folds)
 
             # Create train sets
             splits = []
-            for fold in range(folds):
+            for fold in range(len(train_ids)):
                 splits.append({'train': train_ids[fold],
                                'test': test_ids[fold]})
 
@@ -691,11 +737,55 @@ def collate_batch(batch):
     return [x, A, graph_support, N_nodes, labels]
 
 
+is_regression = args.dataset in ['COLORS-3', 'TRIANGLES']  # other datasets can be for the regression task (see their README.txt)
+transforms = []  # for PyTorch Geometric
+if args.dataset in ['COLORS-3', 'TRIANGLES']:
+    assert n_folds == 1, 'use train, val and test splits for these datasets'
+    assert args.use_cont_node_attr, 'node attributes should be used for these datasets'
+
+    if args.torch_geom:
+        # Class to read note attention from DS_node_attributes.txt
+        class HandleNodeAttention(object):
+            def __call__(self, data):
+                if args.dataset == 'COLORS-3':
+                    data.attn = torch.softmax(data.x[:, 0], dim=0)
+                    data.x = data.x[:, 1:]
+                else:
+                    data.attn = torch.softmax(data.x, dim=0)
+                    data.x = None
+                return data
+
+        transforms.append(HandleNodeAttention())
+else:
+    assert n_folds == 10, '10-fold cross-validation should be used for other datasets'
+
+print('Regression={}'.format(is_regression))
 print('Loading data')
 
+if is_regression:
+    def loss_fn(output, target, reduction='mean'):
+        loss = (target.float().squeeze() - output.squeeze()) ** 2
+        return loss.sum() if reduction == 'sum' else loss.mean()
+
+    predict_fn = lambda output: output.round().long().detach().cpu()
+else:
+    loss_fn = F.cross_entropy
+    predict_fn = lambda output: output.max(1, keepdim=True)[1].detach().cpu()
+
 if args.torch_geom:
+    if args.degree:
+        if args.dataset == 'TRIANGLES':
+            max_degree = 14
+        else:
+            raise NotImplementedError('max_degree value should be specified in advance. '
+                                      'Try running without --torch_geom (-g) and look at dataset statistics printed out by our code.')
+
+    if args.degree:
+        transforms.append(T.OneHotDegree(max_degree=max_degree, cat=False))
+
     dataset = TUDataset('./data/%s/' % args.dataset, name=args.dataset,
-                        use_node_attr=args.use_cont_node_attr)
+                        use_node_attr=args.use_cont_node_attr,
+                        transform=T.Compose(transforms))
     train_ids, test_ids = split_ids(rnd_state.permutation(len(dataset)), folds=n_folds)
 
 else:
@@ -705,6 +795,7 @@ else:
                             use_cont_node_attr=args.use_cont_node_attr)
 
 acc_folds = []
+
 for fold_id in range(n_folds):
 
     loaders = []
@@ -723,11 +814,11 @@ for fold_id in range(n_folds):
                             collate_fn=collate_batch)
         loaders.append(loader)
 
-    print('\nFOLD {}, train {}, test {}'.format(fold_id, len(loaders[0].dataset), len(loaders[1].dataset)))
+    print('\nFOLD {}/{}, train {}, test {}'.format(fold_id + 1, n_folds, len(loaders[0].dataset), len(loaders[1].dataset)))
 
     if args.model == 'gcn':
         model = GCN(in_features=loaders[0].dataset.num_features,
-                    out_features=loaders[0].dataset.num_classes,
+                    out_features=1 if is_regression else loaders[0].dataset.num_classes,
                     n_hidden=args.n_hidden,
                     filters=args.filters,
                     K=args.filter_scale,
@@ -737,7 +828,7 @@ for fold_id in range(n_folds):
                     scale_identity=args.scale_identity).to(args.device)
     elif args.model == 'unet':
         model = GraphUnet(in_features=loaders[0].dataset.num_features,
-                          out_features=loaders[0].dataset.num_classes,
+                          out_features=1 if is_regression else loaders[0].dataset.num_classes,
                           n_hidden=args.n_hidden,
                           filters=args.filters,
                           K=args.filter_scale,
@@ -749,7 +840,7 @@ for fold_id in range(n_folds):
                           visualize=args.visualize).to(args.device)
     elif args.model == 'mgcn':
         model = MGCN(in_features=loaders[0].dataset.num_features,
-                     out_features=loaders[0].dataset.num_classes,
+                     out_features=1 if is_regression else loaders[0].dataset.num_classes,
                      n_relations=2,
                      n_hidden=args.n_hidden,
                      n_hidden_edge=args.n_hidden_edge,
@@ -825,7 +916,7 @@ for fold_id in range(n_folds):
             loss = loss_fn(output, data[4], reduction='sum')
             test_loss += loss.item()
             n_samples += len(output)
-            pred = output.detach().cpu().max(1, keepdim=True)[1]
+            pred = predict_fn(output)
 
             correct += pred.eq(data[4].detach().cpu().view_as(pred)).sum().item()
 
@@ -838,7 +929,6 @@ for fold_id in range(n_folds):
             acc, (time.time() - start) / len(test_loader)))
         return acc
 
-    loss_fn = F.cross_entropy
     for epoch in range(args.epochs):
         train(loaders[0])  # no need to evaluate after each epoch
     acc = test(loaders[1])

@@ -6,7 +6,21 @@
 
 My attempt to reproduce graph classification results from recent papers [[1](https://openreview.net/forum?id=HJePRoAct7), [2](https://arxiv.org/abs/1811.01287)] using Graph U-Net. So far, my results using Graph U-Net are worse than the baseline (GCN).
 
-I also compare to our recent work on **Multigraph GCN (MGCN)** and **Multigraph ChebNet** [[4](https://arxiv.org/abs/1811.09595)]. More results are presentedin Table 1 of [[4](https://arxiv.org/abs/1811.09595)].
+I also compare to our recent work on **Multigraph GCN (MGCN)** and **Multigraph ChebNet** [[4](https://arxiv.org/abs/1811.09595)]. More results are presented in Table 1 of [[4](https://arxiv.org/abs/1811.09595)].
+
+
+**Update:**
+
+- Added support of one-hot node degree features by using the `--degree` flag.
+- Added support of the COLORS and TRIANGLES datasets from our recent [paper](https://arxiv.org/abs/1905.02850).
+Note that many features like unsupervised/supervised attention are not supported in this repo, see the original [graph_attention_pool](https://github.com/bknyaz/graph_attention_pool) repo for all experiments.
+
+Examples:
+
+```bash
+python graph_unet.py -D COLORS-3 --folds 1 -gc
+python graph_unet.py -D TRIANGLES --folds 1 -gc --degree
+```
 
 ### Data
 This repository contains all necessary data for the PROTEINS dataset. It can be found [here](https://ls11-www.cs.tu-dortmund.de/people/morris/graphkerneldatasets/) along with similar datasets or in the [data](data) folder of this repo.
