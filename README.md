@@ -8,6 +8,20 @@ My attempt to reproduce graph classification results from recent papers [[1](htt
 
 I also compare to our recent work on **Multigraph GCN (MGCN)** and **Multigraph ChebNet** [[4](https://arxiv.org/abs/1811.09595)]. More results are presented in Table 1 of [[4](https://arxiv.org/abs/1811.09595)].
 
+## Citation
+
+Please use this citation if you use this code in your research:
+
+```
+@misc{knyazgraphnn,
+  author = {Knyazev, Boris},
+  title = {Graph Classification with Graph Convolutional Networks in PyTorch},
+  year = {2018},
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  howpublished = {\url{https://github.com/bknyaz/graph_nn}},
+}
+```
 
 **Update:**
 
