@@ -13,13 +13,10 @@ I also compare to our recent work on **Multigraph GCN (MGCN)** and **Multigraph 
 Please use this citation if you use this code in your research:
 
 ```
-@misc{knyazgraphnn,
+@misc{knyazev2018graphnn,
   author = {Knyazev, Boris},
   title = {Graph Classification with Graph Convolutional Networks in PyTorch},
-  year = {2018},
-  publisher = {GitHub},
-  journal = {GitHub repository},
-  howpublished = {\url{https://github.com/bknyaz/graph_nn}}
+  year = {2018}
 }
 ```
 
