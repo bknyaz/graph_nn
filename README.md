@@ -10,7 +10,7 @@ I also compare to our recent work on **Multigraph GCN (MGCN)** and **Multigraph 
 
 ## Citation
 
-Please use this citation if you use this code in your research:
+Please use this citation if you want to cite this code in your paper:
 
 ```
 @misc{knyazev2018graphnn,
