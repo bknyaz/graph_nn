@@ -19,7 +19,7 @@ Please use this citation if you use this code in your research:
   year = {2018},
   publisher = {GitHub},
   journal = {GitHub repository},
-  howpublished = {\url{https://github.com/bknyaz/graph_nn}},
+  howpublished = {\url{https://github.com/bknyaz/graph_nn}}
 }
 ```
 
